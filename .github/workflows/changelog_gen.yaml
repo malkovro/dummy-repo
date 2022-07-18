@@ -1,7 +1,9 @@
 name: Release Preparation 🚀
 on:
   workflow_dispatch:
-
+    inputs:
+      version:
+        description: 'New version number'
 permissions:
   contents: write
   pull-requests: write
