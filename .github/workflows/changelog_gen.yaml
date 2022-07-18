@@ -1,9 +1,7 @@
 name: Release Preparation 🚀
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'New version number'
+
 permissions:
   contents: write
   pull-requests: write
@@ -27,7 +25,10 @@ jobs:
           curl -L https://github.com/malkovro/github-changelog/archive/refs/tags/v1.5.0.tar.gz -o github-changelog.tar.gz
           tar -xvf github-changelog.tar.gz
           cd github-changelog-1.5.0
-          echo "::set-output name=CHANGELOG::$(python -m changelog.__init__ "" $GITHUB_REPOSITORY $PREVIOUS_TAG main --github-token $GITHUB_TOKEN)"
+          CHANGELOG=$(python -m changelog.__init__ $GITHUB_REPOSITORY_OWNER ${{ github.event.repository.name }} $PREVIOUS_TAG --github-token $GITHUB_TOKEN)
+          echo "CHANGELOG<<EOF" >> $GITHUB_ENV
+          echo "$CHANGELOG" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
           cd ..
           rm -rf github-changelog*
         env:
@@ -38,10 +39,15 @@ jobs:
         uses: "WyriHaximus/github-action-next-semvers@v1"
         with:
           version: ${{ steps.previoustag.outputs.tag }}
-      - name: Update Changelog
-        run: |
-          export CHANGELOG_ENTRY="[UNRELEASED]\n[v${{ steps.semvers.outputs.patch }}]${{ steps.changelog.outputs.CHANGELOG }}"
-          sed -i 's/[UNRELEASED]/$CHANGELOG_ENTRY/g' CHANGELOG.md
+      - name: Set New Version as Patch
+        if: ${{ contains(env.CHANGELOG, 'PATCH RELEASE') }}
+        run: echo "NEW_VERSION=${{ steps.semvers.outputs.patch }}" >> $GITHUB_ENV
+      - name: Set New Version as Minor
+        if: ${{ contains(env.CHANGELOG, 'MINOR RELEASE') }}
+        run: echo "NEW_VERSION=${{ steps.semvers.outputs.minor }}" >> $GITHUB_ENV
+      - name: Set New Version as Major
+        if: ${{ contains(env.CHANGELOG, 'MAJOR RELEASE') }}
+        run: echo "NEW_VERSION=${{ steps.semvers.outputs.major }}" >> $GITHUB_ENV
       # - name: Set up JDK
       #   uses: actions/setup-java@v1
       #   with:
@@ -50,22 +56,25 @@ jobs:
       #   run: |
       #     git config user.name 'Barkibot'
       #     git config user.email 'dev+bot@barkibu.com'
-      # - name: Update version number and Create Pull Request
-      #   run: |
-      #     mvn versions:set -DnewVersion=${{ steps.semvers.outputs.patch }} -DprocessAllModules
+      - name: Update version number and Create Pull Request
+        run: |
+          CHANGELOG_ITEMS=$(echo "${{ env.CHANGELOG }}" | awk NR\>1)
+          CHANGELOG_ENTRY="[UNRELEASED]\n\n# [${{ env.NEW_VERSION }}]\n$CHANGELOG_ITEMS"
+          sed -i "s/\[UNRELEASED\]$/$CHANGELOG_ENTRY/g" CHANGELOG.md
+      #     mvn versions:set -DnewVersion=${{ env.NEW_VERSION }} -DprocessAllModules
       #     mvn versions:commit
       - uses: EndBug/add-and-commit@v7
         with:
           author_name: Barkibot Releaser
           author_email: dev+bot@barkibu.com
-          branch: release/v${{ steps.semvers.outputs.patch }}
+          branch: release/v${{ env.NEW_VERSION }}
           branch_mode: create
       - uses: repo-sync/pull-request@v2
         id: open-pr
         with:
-          source_branch: release/v${{ steps.semvers.outputs.patch }}
-          pr_title: 'Release ${{ steps.semvers.outputs.patch }}'
-          destination_branch: master
+          source_branch: release/v${{ env.NEW_VERSION }}
+          pr_title: 'Release ${{ env.NEW_VERSION }}'
+          destination_branch: main
           pr_label: ignore-for-kpis
           github_token: ${{ secrets.GITHUB_TOKEN }}
       # - uses: peter-evans/enable-pull-request-automerge@v1
