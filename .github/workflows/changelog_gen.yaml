@@ -1,0 +1,74 @@
+name: Release Preparation 🚀
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  upgradeVersionNumber:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0 # Required due to the way Git works, without it this action won't be able to find any or the correct tags
+      - name: 'Get Previous tag'
+        id: previoustag
+        uses: "WyriHaximus/github-action-get-previous-tag@v1"
+        with:
+          fallback: 0.0.1 # Optional fallback tag to use when no tag can be found
+      - name: 'Get Changelog'
+        id: changelog
+        run: |
+          curl https://github.com/malkovro/github-changelog/archive/refs/tags/v1.5.0.tar.gz -o github-changelog.tar.gz
+          tar -xvf github-changelog.tar.gz
+          cd github-changelog-1.5.0
+          echo "::set-output name=CHANGELOG::$(python -m changelog.__init__ "" $GITHUB_REPOSITORY $PREVIOUS_TAG main --github-token $GITHUB_TOKEN)"
+          cd ..
+          rm -rf github-changelog*
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          PREVIOUS_TAG: "${{ steps.previoustag.outputs.tag }}"
+      - name: 'Get next version'
+        id: semvers
+        uses: "WyriHaximus/github-action-next-semvers@v1"
+        with:
+          version: ${{ steps.previoustag.outputs.tag }}
+      - name: Update Changelog
+        run: |
+          export CHANGELOG_ENTRY="[UNRELEASED]\n[v${{ steps.semvers.outputs.patch }}]${{ steps.changelog.outputs.CHANGELOG }}"
+          sed -i 's/[UNRELEASED]/$CHANGELOG_ENTRY/g' CHANGELOG.md
+      # - name: Set up JDK
+      #   uses: actions/setup-java@v1
+      #   with:
+      #     java-version: 12
+      # - name: whoami
+      #   run: |
+      #     git config user.name 'Barkibot'
+      #     git config user.email 'dev+bot@barkibu.com'
+      # - name: Update version number and Create Pull Request
+      #   run: |
+      #     mvn versions:set -DnewVersion=${{ steps.semvers.outputs.patch }} -DprocessAllModules
+      #     mvn versions:commit
+      - uses: EndBug/add-and-commit@v7
+        with:
+          author_name: Barkibot Releaser
+          author_email: dev+bot@barkibu.com
+          branch: release/v${{ steps.semvers.outputs.patch }}
+          branch_mode: create
+      - uses: repo-sync/pull-request@v2
+        id: open-pr
+        with:
+          source_branch: release/v${{ steps.semvers.outputs.patch }}
+          pr_title: 'Release ${{ steps.semvers.outputs.patch }}'
+          destination_branch: master
+          pr_label: ignore-for-kpis
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      # - uses: peter-evans/enable-pull-request-automerge@v1
+      #   with:
+      #     token: ${{ secrets.RELEASE_AUTOMATION_PAT }}
+      #     pull-request-number: ${{steps.open-pr.outputs.pr_number}}
+
+ 
