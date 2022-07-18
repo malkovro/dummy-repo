@@ -24,7 +24,7 @@ jobs:
       - name: 'Get Changelog'
         id: changelog
         run: |
-          curl https://github.com/malkovro/github-changelog/archive/refs/tags/v1.5.0.tar.gz -o github-changelog.tar.gz
+          curl -L https://github.com/malkovro/github-changelog/archive/refs/tags/v1.5.0.tar.gz -o github-changelog.tar.gz
           tar -xvf github-changelog.tar.gz
           cd github-changelog-1.5.0
           echo "::set-output name=CHANGELOG::$(python -m changelog.__init__ "" $GITHUB_REPOSITORY $PREVIOUS_TAG main --github-token $GITHUB_TOKEN)"
