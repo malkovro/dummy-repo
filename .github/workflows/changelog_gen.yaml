@@ -27,7 +27,7 @@ jobs:
           curl -L https://github.com/malkovro/github-changelog/archive/refs/tags/v1.5.0.tar.gz -o github-changelog.tar.gz
           tar -xvf github-changelog.tar.gz
           cd github-changelog-1.5.0
-          echo "::set-output name=CHANGELOG::$(python -m changelog.__init__ "" $GITHUB_REPOSITORY $PREVIOUS_TAG main --github-token $GITHUB_TOKEN)"
+          echo "::set-output name=CHANGELOG::$(python -m changelog.__init__ $GITHUB_REPOSITORY_OWNER ${{ github.event.repository.name }} $PREVIOUS_TAG --github-token $GITHUB_TOKEN)"
           cd ..
           rm -rf github-changelog*
         env:
@@ -38,10 +38,24 @@ jobs:
         uses: "WyriHaximus/github-action-next-semvers@v1"
         with:
           version: ${{ steps.previoustag.outputs.tag }}
-      - name: Update Changelog
+      - name: Update Patch Changelog
         run: |
-          export CHANGELOG_ENTRY="[UNRELEASED]\n[v${{ steps.semvers.outputs.patch }}]${{ steps.changelog.outputs.CHANGELOG }}"
-          sed -i 's/[UNRELEASED]/$CHANGELOG_ENTRY/g' CHANGELOG.md
+          export CHANGELOG_ITEMS=$(echo "${{ steps.changelog.outputs.CHANGELOG }}" | grep -v 'RELEASE')
+          export CHANGELOG_ENTRY="[UNRELEASED]\n\n[v${{ steps.semvers.outputs.patch }}]\n$CHANGELOG_ITEMS"
+          sed -i "s/\[UNRELEASED\]$/$CHANGELOG_ENTRY/g" CHANGELOG.md
+        if: ${{ contains(steps.changelog.outputs.CHANGELOG, 'PATCH RELEASE') }}
+      - name: Update Minor Changelog
+        run: |
+          export CHANGELOG_ITEMS=$(echo "${{ steps.changelog.outputs.CHANGELOG }}" | grep -v 'RELEASE')
+          export CHANGELOG_ENTRY="[UNRELEASED]\n\n[v${{ steps.semvers.outputs.minor }}]\n$CHANGELOG_ITEMS"
+          sed -i "s/\[UNRELEASED\]$/$CHANGELOG_ENTRY/g" CHANGELOG.md
+        if: ${{ contains(steps.changelog.outputs.CHANGELOG, 'MINOR RELEASE') }}
+      - name: Update Major Changelog
+        run: |
+          export CHANGELOG_ITEMS=$(echo "${{ steps.changelog.outputs.CHANGELOG }}" | grep -v 'RELEASE')
+          export CHANGELOG_ENTRY="[UNRELEASED]\n\n[v${{ steps.semvers.outputs.major }}]\n$CHANGELOG_ITEMS"
+          sed -i "s/\[UNRELEASED\]$/$CHANGELOG_ENTRY/g" CHANGELOG.md
+        if: ${{ contains(steps.changelog.outputs.CHANGELOG, 'MAJOR RELEASE') }}
       # - name: Set up JDK
       #   uses: actions/setup-java@v1
       #   with:
@@ -65,7 +79,7 @@ jobs:
         with:
           source_branch: release/v${{ steps.semvers.outputs.patch }}
           pr_title: 'Release ${{ steps.semvers.outputs.patch }}'
-          destination_branch: master
+          destination_branch: main
           pr_label: ignore-for-kpis
           github_token: ${{ secrets.GITHUB_TOKEN }}
       # - uses: peter-evans/enable-pull-request-automerge@v1
